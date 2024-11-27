@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+CONFIG_FILE="${HOME}/.config/daemon_starter.conf"
+
+# Function to check if X server is active
+check_x_server() {
+    if xset q > /dev/null 2>&1; then
+        echo "X server is running."
+        return 0
+    else
+        echo "X server is not running."
+        return 1
+    fi
+}
+
+# Wait for X server to become active
+until check_x_server; do
+    sleep 3
+done
+
+# Check if argument is provided
+if [ -z "$1" ]; then
+    echo "Usage: daemon_starter <program_name>"
+    exit 1
+fi
+
+# Read the config file
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Config file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+# Get the program command from the config file and expand any ~ to $HOME
+PROGRAM_CMD=$(grep "^$1=" "$CONFIG_FILE" | cut -d'=' -f2- | sed "s|~|$HOME|g")
+
+if [ -z "$PROGRAM_CMD" ]; then
+    echo "Program '$1' not found in config file."
+    exit 1
+fi
+
+echo "Starting $1 with command: $PROGRAM_CMD"
+
+# Start the program
+while true; do
+    if ! pgrep -fx "$PROGRAM_CMD" > /dev/null; then
+        echo "Starting $1..."
+        # Export DISPLAY and XAUTHORITY to ensure correct environment
+        export DISPLAY=:0
+        export XAUTHORITY="${HOME}/.Xauthority"
+
+        # Run the program, redirecting output to /dev/null
+        eval "$PROGRAM_CMD" > /dev/null 2>&1 &
+
+        # Check if the program started successfully
+        sleep 1
+        if pgrep -fx "$PROGRAM_CMD" > /dev/null; then
+            echo "$1 started successfully."
+        else
+            echo "Failed to start $1."
+        fi
+    else
+        echo "$1 is already running."
+    fi
+    sleep 5
+done
